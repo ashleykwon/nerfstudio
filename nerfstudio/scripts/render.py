@@ -136,7 +136,7 @@ def _render_trajectory_video(
             train_cameras = None
 
         with progress:
-            for camera_idx in progress.track(range(cameras.size), description=""):
+            for camera_idx in progress.track(range(cameras.size), description=""): # Iterate through each camera position 
                 obb_box = None
                 if crop_data is not None:
                     obb_box = crop_data.obb
@@ -144,7 +144,36 @@ def _render_trajectory_video(
                 max_dist, max_idx = -1, -1
                 true_max_dist, true_max_idx = -1, -1
 
-                if render_nearest_camera:
+                ############################################ Added by me ####################################################
+                # TODO generate a RayBundle image width * image height rays from one camera at camera_idx and then render an image with it
+                # cameras is a 1D array with 60 cameras
+
+                # Get camera_indices and coords
+                x_coords = torch.linspace(0, cameras[camera_idx].height[0], cameras[camera_idx].height[0])  
+                y_coords = torch.linspace(0, cameras[camera_idx].width[0], cameras[camera_idx].width[0])
+                xx, yy = torch.meshgrid(x_coords, y_coords, indexing='ij')
+                coords = torch.stack([xx, yy], dim=-1) # meshgrid of size h * w * 2
+                
+                bundle = cameras.generate_rays(camera_idx, coords)
+                outputs = pipeline.model.get_outputs(bundle) # fix: Called get_outputs with not a camera
+
+                # print(colormap_options) # ColormapOptions(colormap='default', normalize=False, colormap_min=0, colormap_max=1, invert=False)
+                ############# For reference (copied from the code snippet under if render_nearest_camera below) ###################
+                # bundle = RayBundle( 
+                #             origins=cam_pos.view(1, 3), # view is like np.reshape but for tensors
+                #             directions=((cam_pos - train_cam_pos) / (cam_pos - train_cam_pos).norm()).view(1, 3),
+                #             pixel_area=torch.tensor(1).view(1, 1),
+                #             nears=torch.tensor(0.05).view(1, 1),
+                #             fars=torch.tensor(100).view(1, 1),
+                #             camera_indices=torch.tensor(0).view(1, 1),
+                #             metadata={},
+                #         ).to(pipeline.device)
+                      
+                # outputs = pipeline.model.get_outputs(bundle)
+                ###################################################################################################################
+  
+
+                if render_nearest_camera: # Not run
                     assert pipeline.datamanager.train_dataset is not None
                     assert train_dataset is not None
                     assert train_cameras is not None
@@ -153,8 +182,8 @@ def _render_trajectory_video(
 
                     for i in range(len(train_cameras)):
                         train_cam_pos = train_cameras[i].camera_to_worlds[:, 3].cpu()
-                        # Make sure the line of sight from rendered cam to training cam is not blocked by any object
-                        bundle = RayBundle(
+                        # Make sure the line of sight from rendered cam to training cam is not blocked by any object -> MODIFY THIS original code
+                        bundle = RayBundle( 
                             origins=cam_pos.view(1, 3),
                             directions=((cam_pos - train_cam_pos) / (cam_pos - train_cam_pos).norm()).view(1, 3),
                             pixel_area=torch.tensor(1).view(1, 1),
@@ -163,6 +192,7 @@ def _render_trajectory_video(
                             camera_indices=torch.tensor(0).view(1, 1),
                             metadata={},
                         ).to(pipeline.device)
+                      
                         outputs = pipeline.model.get_outputs(bundle)
 
                         q = tf.SO3.from_matrix(train_cameras[i].camera_to_worlds[:3, :3].numpy(force=True)).wxyz
@@ -202,7 +232,7 @@ def _render_trajectory_video(
                             outputs["rgba"] = rgba
 
                 render_image = []
-                for rendered_output_name in rendered_output_names:
+                for rendered_output_name in rendered_output_names: # if render_nearest_camera is not true -> Take a look at this for loop
                     if rendered_output_name not in outputs:
                         CONSOLE.rule("Error", style="red")
                         CONSOLE.print(f"Could not find {rendered_output_name} in the model outputs", justify="center")
@@ -226,7 +256,7 @@ def _render_trajectory_video(
                         )
                     elif rendered_output_name == "rgba":
                         output_image = output_image.detach().cpu().numpy()
-                    else:
+                    else: # This part is run 
                         output_image = (
                             colormaps.apply_colormap(
                                 image=output_image,
@@ -238,7 +268,7 @@ def _render_trajectory_video(
                     render_image.append(output_image)
 
                 # Add closest training image to the right of the rendered image
-                if render_nearest_camera:
+                if render_nearest_camera: # Not run
                     assert train_dataset is not None
                     assert train_cameras is not None
                     img = train_dataset.get_image_float32(max_idx)
@@ -463,7 +493,6 @@ class RenderCameraPath(BaseRender):
         seconds = camera_path["seconds"]
         crop_data = get_crop_from_json(camera_path)
         camera_path = get_path_from_json(camera_path)
-
         if (
             camera_path.camera_type[0] == CameraType.OMNIDIRECTIONALSTEREO_L.value
             or camera_path.camera_type[0] == CameraType.VR180_L.value

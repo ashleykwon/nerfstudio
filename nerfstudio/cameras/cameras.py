@@ -377,6 +377,7 @@ class Cameras(TensorDataclass):
         Returns:
             Rays for the given camera indices and coords.
         """
+        
         # Check the argument types to make sure they're valid and all shaped correctly
         assert isinstance(camera_indices, (torch.Tensor, int)), "camera_indices must be a tensor or int"
         assert coords is None or isinstance(coords, torch.Tensor), "coords must be a tensor or None"
