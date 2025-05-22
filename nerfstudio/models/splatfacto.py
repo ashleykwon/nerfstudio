@@ -63,7 +63,7 @@ def resize_image(image: torch.Tensor, d: int):
 
 
 @torch_compile()
-def get_viewmat(optimized_camera_to_world):
+def get_viewmat(optimized_camera_to_world): # optimized_camera_to_world has dimension 1 by 3 by 4
     """
     function that converts c2w to gsplat world2camera matrix, using compile for some speed
     """
@@ -78,7 +78,7 @@ def get_viewmat(optimized_camera_to_world):
     viewmat[:, 3, 3] = 1.0  # homogenous
     viewmat[:, :3, :3] = R_inv
     viewmat[:, :3, 3:4] = T_inv
-    return viewmat
+    return viewmat # 1 by 4 by 4
 
 
 @dataclass
@@ -500,7 +500,7 @@ class SplatfactoModel(Model):
             assert camera.shape[0] == 1, "Only one camera at a time"
             optimized_camera_to_world = self.camera_optimizer.apply_to_camera(camera)
         else:
-            optimized_camera_to_world = camera.camera_to_worlds
+            optimized_camera_to_world = camera.camera_to_worlds # Camera to world matrices. Tensor of per-image c2w matrices, in [R | t] format
 
         # cropping
         if self.crop_box is not None and not self.training:
@@ -578,6 +578,47 @@ class SplatfactoModel(Model):
                 self.gauss_params, self.optimizers, self.strategy_state, self.step, self.info
             )
         alpha = alpha[:, ...]
+
+#################################################### ADDED BY ME FOR LOCAL MODIFICATION ##########################################
+        # import math
+        # angle_radians = math.radians(10)
+        # cos_theta = math.cos(angle_radians)
+        # sin_theta = math.sin(angle_radians)
+        # rotation_matrix_y = torch.tensor([
+        #     [cos_theta, 0, sin_theta],
+        #     [0, 1, 0],
+        #     [-sin_theta, 0, cos_theta]
+        # ])
+        # new_rotation_matrix = camera.camera_to_worlds[:,:,:3]@rotation_matrix_y.cuda()
+        # viewmat2 =  get_viewmat(torch.cat((new_rotation_matrix, camera.camera_to_worlds[:,:,3].unsqueeze(2)), dim=2))
+        # render2, alpha2, self.info = rasterization(
+        #     means=means_crop,
+        #     quats=quats_crop,  # rasterization does normalization internally
+        #     scales=torch.exp(scales_crop),
+        #     opacities=torch.sigmoid(opacities_crop).squeeze(-1),
+        #     colors=colors_crop,
+        #     viewmats=viewmat2,  # [1, 4, 4]
+        #     Ks=K,  # [1, 3, 3]
+        #     width=W,
+        #     height=H,
+        #     packed=False,
+        #     near_plane=0.01,
+        #     far_plane=1e10,
+        #     render_mode=render_mode,
+        #     sh_degree=sh_degree_to_use,
+        #     sparse_grad=False,
+        #     absgrad=self.strategy.absgrad if isinstance(self.strategy, DefaultStrategy) else False,
+        #     rasterize_mode=self.config.rasterize_mode,
+        #     # set some threshold to disregrad small gaussians for faster rendering.
+        #     # radius_clip=3.0,
+        # )
+
+        # start_row = 20
+        # end_row = 120
+        # start_col = 30
+        # end_col = 130
+        # render[:, start_row:end_row, start_col:end_col, :] = render2[:, start_row:end_row, start_col:end_col, :]
+    ##########################################################################################################################
 
         background = self._get_background_color()
         rgb = render[:, ..., :3] + (1 - alpha) * background

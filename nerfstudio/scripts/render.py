@@ -154,8 +154,9 @@ def _render_trajectory_video(
                 xx, yy = torch.meshgrid(x_coords, y_coords, indexing='ij')
                 coords = torch.stack([xx, yy], dim=-1) # meshgrid of size h * w * 2
                 
-                bundle = cameras.generate_rays(camera_idx, coords)
-                outputs = pipeline.model.get_outputs(bundle) # fix: Called get_outputs with not a camera
+                # bundle = cameras.generate_rays(camera_idx, coords).to(pipeline.device)
+                cameras[camera_idx].camera_type[0] = CameraType.EQUIRECTANGULAR.value
+                outputs = pipeline.model.get_outputs_for_camera(cameras[camera_idx:camera_idx+1]) # fix: Called get_outputs with not a camera -> caused because not isinstance(camera, Cameras) (see models/splatfacto.py)
 
                 # print(colormap_options) # ColormapOptions(colormap='default', normalize=False, colormap_min=0, colormap_max=1, invert=False)
                 ############# For reference (copied from the code snippet under if render_nearest_camera below) ###################
